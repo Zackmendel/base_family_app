@@ -20,6 +20,32 @@ export default function Dashboard() {
     loadSuggestions();
   }, []);
 
+  useEffect(() => {
+    const balance = subAccounts
+      .filter((acc) => acc.isActive)
+      .reduce((sum, acc) => sum + acc.balance, 0);
+
+    setTotalBalance(balance);
+  }, [subAccounts]);
+
+  useEffect(() => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const spent = transactions
+      .filter(
+        (txn) =>
+          txn.type === "debit" &&
+          txn.status === "completed" &&
+          txn.timestamp >= thirtyDaysAgo
+      )
+      .reduce((sum, txn) => sum + txn.amount, 0);
+
+    setTotalSpent(spent);
+
+    const pending = transactions.filter((txn) => txn.status === "pending").length;
+    setPendingCount(pending);
+  }, [transactions]);
+
   const loadData = () => {
     const allTransactions = BaseSDK.getAllTransactions();
     const allSubAccounts = BaseSDK.getAllSubAccounts();
@@ -28,26 +54,6 @@ export default function Dashboard() {
     setTransactions(allTransactions.slice(0, 10));
     setSubAccounts(allSubAccounts);
     setMembers(allMembers);
-
-    const balance = allSubAccounts
-      .filter((acc) => acc.isActive)
-      .reduce((sum, acc) => sum + acc.balance, 0);
-    setTotalBalance(balance);
-
-    const spent = allTransactions
-      .filter(
-        (txn) =>
-          txn.type === "debit" &&
-          txn.status === "completed" &&
-          txn.timestamp >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      )
-      .reduce((sum, txn) => sum + txn.amount, 0);
-    setTotalSpent(spent);
-
-    const pending = allTransactions.filter(
-      (txn) => txn.status === "pending"
-    ).length;
-    setPendingCount(pending);
   };
 
   const loadSuggestions = async () => {
@@ -106,24 +112,103 @@ export default function Dashboard() {
     }
   };
 
-  const handleApproveTransaction = async (transactionId: string) => {
-    try {
-      BaseSDK.approveTransaction(transactionId);
-      loadData();
-      loadSuggestions();
-    } catch (error) {
-      console.error("Failed to approve transaction:", error);
-    }
+  const handleAdjustLimit = (memberName: string) => {
+    console.log(`Adjusting limit for ${memberName}`);
   };
 
-  const handleDeclineTransaction = async (transactionId: string) => {
-    try {
-      BaseSDK.declineTransaction(transactionId);
-      loadData();
-      loadSuggestions();
-    } catch (error) {
-      console.error("Failed to decline transaction:", error);
+  const handleRevokePermission = (accountId: string, memberName: string) => {
+    setSubAccounts((prevAccounts) =>
+      prevAccounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              isActive: false,
+              updatedAt: new Date(),
+            }
+          : account
+      )
+    );
+
+    console.log(`Permission revoked for ${memberName}`);
+  };
+
+  const handleGrantPermission = (accountId: string, memberName: string) => {
+    setSubAccounts((prevAccounts) =>
+      prevAccounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              isActive: true,
+              updatedAt: new Date(),
+            }
+          : account
+      )
+    );
+
+    console.log(`Permission granted for ${memberName}`);
+  };
+
+  const handleApproveTransaction = (transactionId: string) => {
+    const transactionToApprove = transactions.find(
+      (txn) => txn.id === transactionId
+    );
+
+    if (!transactionToApprove || transactionToApprove.status !== "pending") {
+      return;
     }
+
+    setTransactions((prevTransactions) =>
+      prevTransactions.map((txn) =>
+        txn.id === transactionId ? { ...txn, status: "completed" } : txn
+      )
+    );
+
+    setSubAccounts((prevAccounts) =>
+      prevAccounts.map((account) => {
+        if (account.id !== transactionToApprove.subAccountId) {
+          return account;
+        }
+
+        const updatedBalance =
+          transactionToApprove.type === "debit"
+            ? account.balance - transactionToApprove.amount
+            : account.balance + transactionToApprove.amount;
+
+        return {
+          ...account,
+          balance: updatedBalance,
+          updatedAt: new Date(),
+        };
+      })
+    );
+
+    console.log(
+      `Transaction approved: ${transactionToApprove.description} for ${formatCurrency(
+        transactionToApprove.amount
+      )}`
+    );
+  };
+
+  const handleDeclineTransaction = (transactionId: string) => {
+    const transactionToDecline = transactions.find(
+      (txn) => txn.id === transactionId
+    );
+
+    if (!transactionToDecline || transactionToDecline.status !== "pending") {
+      return;
+    }
+
+    setTransactions((prevTransactions) =>
+      prevTransactions.map((txn) =>
+        txn.id === transactionId ? { ...txn, status: "declined" } : txn
+      )
+    );
+
+    console.log(
+      `Transaction rejected: ${transactionToDecline.description} for ${formatCurrency(
+        transactionToDecline.amount
+      )}`
+    );
   };
 
   return (
@@ -195,17 +280,26 @@ export default function Dashboard() {
           >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Pending Approvals
+                {pendingCount > 0 ? "Pending Approvals" : "All Clear"}
               </h3>
-              <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                ⏱️
+              <div
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center",
+                  pendingCount > 0
+                    ? "bg-yellow-100 dark:bg-yellow-900/30"
+                    : "bg-green-100 dark:bg-green-900/30"
+                )}
+              >
+                {pendingCount > 0 ? "⏱️" : "✅"}
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900 dark:text-white">
               {pendingCount}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Require your attention
+              {pendingCount > 0
+                ? "Require your attention"
+                : "No pending approvals"}
             </p>
           </motion.div>
         </div>
@@ -383,7 +477,43 @@ export default function Dashboard() {
                         {spendPercentage.toFixed(0)}% of {account.spendPeriod}{" "}
                         limit
                       </p>
-                    </motion.div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleAdjustLimit(member.name)}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                          type="button"
+                        >
+                          Adjust Limit
+                        </motion.button>
+                        {account.isActive ? (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() =>
+                              handleRevokePermission(account.id, member.name)
+                            }
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50 transition-colors"
+                            type="button"
+                          >
+                            Revoke Permission
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() =>
+                              handleGrantPermission(account.id, member.name)
+                            }
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-200 dark:hover:bg-green-900/50 transition-colors"
+                            type="button"
+                          >
+                            Grant Permission
+                          </motion.button>
+                        )}
+                      </div>
+
                   );
                 })}
               </div>
