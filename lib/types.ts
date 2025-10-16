@@ -90,3 +90,34 @@ export interface Permission {
   requiresApproval: boolean;
   approvalThreshold?: number;
 }
+
+export interface FamilyCardData {
+  id: string;
+  name: string;
+  role: MemberRole;
+  avatar?: string;
+  balance: number;
+  spendLimit: number;
+  isActive: boolean;
+}
+
+export interface SpendChartData {
+  categories: {
+    name: string;
+    amount: number;
+    color: string;
+  }[];
+  totalSpent: number;
+  totalBudget: number;
+  period: "daily" | "weekly" | "monthly";
+}
+
+export interface SpendControlData {
+  memberId: string;
+  memberName: string;
+  currentSpending: number;
+  dailyLimit?: number;
+  weeklyLimit?: number;
+  monthlyLimit?: number;
+  period: "daily" | "weekly" | "monthly";
+}
