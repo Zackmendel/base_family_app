@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { BaseSDK } from "@/lib/baseSDK";
@@ -323,7 +321,7 @@ export default function SubAccountPage() {
                           Can View Family
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          View other family members' accounts
+                          View other family members&apos; accounts
                         </p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
